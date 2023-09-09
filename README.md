@@ -2,7 +2,7 @@
 
 The Coreum Grant Dao is designed for decentralized grant management using the Cosmos SDK and the cosmwasm platform. This DAO allows members to propose, vote on, and execute grant proposals based on their voting weight.
 
-<img src="./assets/grant_dao_poc.png" width="50%"/>
+<img src="./assets/grant_dao_poc.png" width="100%"/>
 
 ## Table of Contents
 
