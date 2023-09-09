@@ -243,3 +243,9 @@ pub struct Member {
     pub weight: Uint128,
 }
 ```
+
+## TODO
+- simple daodao poc
+    - core dao contract
+    - single proposal module
+    - staked voting 
