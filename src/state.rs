@@ -8,6 +8,8 @@ pub struct Proposal {
     pub id: u64,
     pub title: String,
     pub description: String,
+    pub recipient: Addr,
+    pub amount: Uint128,
     pub votes_for: Uint128,
     pub votes_against: Uint128,
     pub executed: bool,

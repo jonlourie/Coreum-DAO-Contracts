@@ -129,6 +129,27 @@ The Makefile uses several predefined variables for configuration:
   make contract_address
   ```
 
+- **propose**:
+  - Submit a new proposal
+
+  ```bash
+  make propose
+  ```
+
+- **vote**:
+  - Cast vote for a proposal
+
+  ```bash
+  make vote
+  ```
+
+- **execute**:
+  - Execute the proposal after voting
+
+  ```bash
+  make execute
+  ```
+
 
 ## Usage
 
@@ -210,6 +231,8 @@ pub struct Proposal {
     pub id: u64,
     pub title: String,
     pub description: String,
+    pub recipient: Addr,
+    pub amount: Uint128,
     pub votes_for: Uint128,
     pub votes_against: Uint128,
     pub executed: bool,

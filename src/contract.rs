@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, StdError
+    entry_point, BankMsg, SubMsg, Coin, Coins, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, StdError
 };
 use cw2::set_contract_version;
 use thiserror::Error;
@@ -44,14 +44,14 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Propose { title, description } => execute_propose(deps, info, title, description),
+        ExecuteMsg::Propose { title, description, recipient, amount } => execute_propose(deps, info, title, description),
         ExecuteMsg::Vote { proposal_id, approve } => execute_vote(deps, info, proposal_id, approve),
-        ExecuteMsg::Execute { proposal_id } => execute_execute(deps, proposal_id),
+        ExecuteMsg::Execute { proposal_id } => execute_execute(deps, env, proposal_id),  // Add env here
     }
 }
 
@@ -62,7 +62,6 @@ fn execute_propose(
     description: String,
 ) -> Result<Response, ContractError> {
 
-    
     let sender_addr = info.sender.as_str();
     let member_opt = MEMBERS.load(deps.storage, sender_addr);
 
@@ -77,6 +76,8 @@ fn execute_propose(
         votes_for: Uint128::zero(),
         votes_against: Uint128::zero(),
         executed: false,
+        amount: Uint128::zero(), //TODO: set to param at instantiate time
+        recipient: info.sender.clone(),
     };
 
     PROPOSALS.save(deps.storage, &proposal.id.to_string(), &proposal)?;
@@ -114,6 +115,7 @@ fn execute_vote(
 
 fn execute_execute(
     deps: DepsMut,
+    env: Env,
     proposal_id: u64,
 ) -> Result<Response, ContractError> {
     let mut proposal = PROPOSALS.load(deps.storage, &proposal_id.to_string())?;
@@ -123,12 +125,38 @@ fn execute_execute(
     }
 
     if proposal.votes_for > proposal.votes_against {
+        let recipient = &proposal.recipient;
+        let amount = &proposal.amount;
+
+        let current_balance = Uint128::zero();
+
+        if current_balance < *amount {
+            return Err(ContractError::Std(StdError::generic_err("Insufficient funds")));
+        }
+
+        let transfer = BankMsg::Send {
+            to_address: recipient.clone().into(),
+            amount: vec![Coin {
+                denom: "udevcore".to_string(),
+                amount: amount.clone(),
+            }],
+        };
+
         proposal.executed = true;
         PROPOSALS.save(deps.storage, &proposal_id.to_string(), &proposal)?;
+
+        let cosmos_msg = cosmwasm_std::CosmosMsg::Bank(transfer);
+
+        return Ok(Response::new()
+            .add_message(cosmos_msg) // TODO: use coreum message instead?
+            .add_attribute("method", "execute_execute")
+            .add_attribute("recipient", recipient.to_string())
+            .add_attribute("amount", amount.to_string()));
     }
 
     Ok(Response::default())
 }
+
 
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -140,8 +168,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{from_binary, Addr};
-    use crate::msg::MemberInit;
+    use cosmwasm_std::{from_binary, Addr, Uint128};
+    use crate::state::Member;
 
 
     #[test]
@@ -149,13 +177,14 @@ mod tests {
         let mut deps = mock_dependencies();
         
         let members = vec![
-            MemberInit {
+            Member {
                 address: Addr::unchecked("addr1"),
-                weight: u128::from(10u128),
+                weight: Uint128::from(10_u128),
             },
-            MemberInit {
+            Member {
                 address: Addr::unchecked("addr2"),
-                weight: u128::from(20u128),
+                weight: Uint128::from(20_u128),
+
             },
         ];
         let msg = InstantiateMsg { members }; 
@@ -169,9 +198,9 @@ mod tests {
         let mut deps = mock_dependencies();
 
         let members = vec![
-            MemberInit {
+            Member {
                 address: Addr::unchecked("addr1"),
-                weight: u128::from(10u128),
+                weight: Uint128::from(10_u128),
             },
         ];
         let msg = InstantiateMsg { members };
@@ -183,6 +212,8 @@ mod tests {
         let msg = ExecuteMsg::Propose {
             title: "Test Proposal".to_string(),
             description: "Description for test".to_string(),
+            amount: Some(Uint128::from(100_u128)),
+            recipient: Some(Addr::unchecked("recipient_address")),
         };
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(0, res.messages.len());
@@ -193,9 +224,9 @@ mod tests {
         let mut deps = mock_dependencies();
 
         let members = vec![
-            MemberInit {
+            Member {
                 address: Addr::unchecked("addr1"),
-                weight: u128::from(10u128),
+                weight: Uint128::from(10_u128),
             },
         ];
         let msg = InstantiateMsg { members };
@@ -205,8 +236,10 @@ mod tests {
         // Propose
         let info = mock_info("addr1", &[]);
         let proposal_msg = ExecuteMsg::Propose {
-            title: "Test Proposal".to_string(),
-            description: "Description for test".to_string(),
+            title: "Some Title".to_string(),
+            description: "Some Description".to_string(),
+            amount: Some(Uint128::from(100_u128)),
+            recipient: Some(Addr::unchecked("recipient_address")),
         };
         execute(deps.as_mut(), mock_env(), info.clone(), proposal_msg).unwrap();
 
@@ -224,9 +257,9 @@ mod tests {
         let mut deps = mock_dependencies();
 
         let members = vec![
-            MemberInit {
+            Member {
                 address: Addr::unchecked("addr1"),
-                weight: u128::from(10u128).into(),
+                weight: Uint128::from(10_u128),
             },
         ];
         let msg = InstantiateMsg { members };
@@ -235,8 +268,10 @@ mod tests {
 
         let info = mock_info("addr1", &[]);
         let proposal_msg = ExecuteMsg::Propose {
-            title: "Test Proposal".to_string(),
-            description: "Description for test".to_string(),
+            title: "Another Title".to_string(),
+            description: "Another Description".to_string(),
+            amount: Some(Uint128::from(100_u128)),
+            recipient: Some(Addr::unchecked("recipient_address")),
         };
         execute(deps.as_mut(), mock_env(), info.clone(), proposal_msg).unwrap();
 
@@ -248,6 +283,6 @@ mod tests {
 
         let exec_msg = ExecuteMsg::Execute { proposal_id: 0 };
         let res = execute(deps.as_mut(), mock_env(), info, exec_msg).unwrap();
-        assert_eq!(0, res.messages.len());
+        assert_eq!(1, res.messages.len());
     }
 }

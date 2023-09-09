@@ -1,18 +1,12 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Uint128};
+use crate::state::{Member};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct InstantiateMsg {
-    pub members: Vec<MemberInit>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub struct MemberInit {
-    pub address: Addr,
-    pub weight: u128,
+    pub members: Vec<Member>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -21,6 +15,8 @@ pub enum ExecuteMsg {
     Propose {
         title: String,
         description: String,
+        recipient: Option<Addr>,
+        amount: Option<Uint128>,
     },
     Vote {
         proposal_id: u64,
